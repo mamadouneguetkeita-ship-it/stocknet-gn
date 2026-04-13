@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockNet GN - Master 2026</title>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+<style>
+:root { --gold:#f2c94c; --bg:#05050a; --card:#0f0f1e; --text:#e4e6f4; --border:rgba(255,255,255,0.1); --red:#eb5757; --green:#27ae60; --blue:#2f80ed; }
+body { font-family:'Segoe UI', sans-serif; background:var(--bg); color:var(--text); margin:0; padding-bottom:40px; }
+header { background:#0b0b1d; padding:15px 30px; border-bottom:2px solid var(--gold); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:1000; }
+.logo { font-size:20px; font-weight:900; color:var(--gold); letter-spacing:1px; }
+.container { max-width:1200px; margin:20px auto; padding:0 20px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:20px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px; }
+.tabs { display:flex; gap:10px; margin-bottom:20px; overflow-x:auto; border-bottom:1px solid var(--border); padding-bottom:10px; }
+.tab-btn { background:none; border:1px solid var(--border); color:#888; padding:10px 20px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+.tab-btn.active { background:var(--gold); color:#000; font-weight:bold; }
+h3 { color:var(--gold); text-transform:uppercase; font-size:11px; margin-top:0; border-left:3px solid var(--gold); padding-left:10px; }
+input, select { width:100%; padding:12px; margin:8px 0; background:#000; border:1px solid var(--border); color:#fff; border-radius:8px; }
+.btn { background:var(--gold); color:#000; border:none; padding:12px; border-radius:8px; cursor:pointer; font-weight:800; width:100%; text-transform:uppercase; }
+.btn-blue { background:var(--blue); color:#fff; }
+.btn-red { background:var(--red); color:#fff; }
+.btn-back { background:#333; color:white; width:auto; padding:5px 15px; font-size:12px; margin-bottom:15px; cursor:pointer; border-radius:4px; border:none; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; padding:12px; color:#6e6e8e; border-bottom:1px solid var(--border); }
+td { padding:12px; border-bottom:1px solid rgba(255,255,255,0.02); }
+/* Format Impression */
+#print-zone { display:none; background:white; color:black; padding:20px; font-family:monospace; }
+@media print { body * { display:none !important; } #print-zone, #print-zone * { display:block !important; } #print-zone { position:absolute; left:0; top:0; width:100%; } }
+</style>
+</head>
+<body>
+
+<div id="print-zone">
+    <center><h2 id="p-comp"></h2><p id="p-date"></p></center>
+    <hr><div id="p-items"></div><hr>
+    <div style="display:flex; justify-content:space-between"><b>TOTAL:</b><b id="p-total"></b></div>
+    <p>Client: <span id="p-client"></span> <br> Tél: <span id="p-tel"></span></p>
+</div>
+
+<div id="login-screen" style="height:100vh; display:flex; align-items:center; justify-content:center;">
+    <div class="card" style="width:350px; text-align:center;">
+        <h2 style="color:var(--gold)">STOCKNET GN</h2>
+        <input id="auth-email" type="email" placeholder="Email">
+        <input id="auth-pin" type="password" placeholder="PIN">
+        <button class="btn" onclick="handleAuth()">Connexion</button>
+    </div>
+</div>
+
+<div id="app-screen" style="display:none;">
+    <header>
+        <div class="logo">STOCKNET <span id="comp-title" style="color:white; font-size:12px; opacity:0.6"></span></div>
+        <button class="btn btn-red" style="width:auto; padding:5px 15px" onclick="location.reload()">Quitter</button>
+    </header>
+
+    <div class="container">
+        <div id="view-admin" style="display:none;">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('t-stock')">📦 Stocks</button>
+                <button class="tab-btn" onclick="switchTab('t-trans')">🚚 Transfert Direct</button>
+                <button class="tab-btn" onclick="switchTab('t-ag')">🏢 Agences</button>
+            </div>
+
+            <div id="t-stock" class="tab-content">
+                <div class="grid">
+                    <div class="card">
+                        <h3>Nouveau Produit (Central)</h3>
+                        <input id="prod-name" placeholder="Nom">
+                        <input id="prod-price" type="number" placeholder="Prix">
+                        <input id="prod-qty" type="number" placeholder="Quantité">
+                        <button class="btn" onclick="addProd()">Enregistrer</button>
+                    </div>
+                    <div class="card">
+                        <h3>Stock Actuel</h3>
+                        <table id="stk-table"><thead><tr><th>Produit</th><th>Qté</th></tr></thead><tbody></tbody></table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="t-trans" class="tab-content" style="display:none;">
+                <div class="card" style="max-width:500px; margin:auto">
+                    <h3>Envoyer vers Agence (Immédiat)</h3>
+                    <select id="trans-p"></select>
+                    <select id="trans-d"></select>
+                    <input id="trans-q" type="number" placeholder="Quantité">
+                    <button class="btn btn-blue" onclick="doTransfer()">Transférer maintenant</button>
+                </div>
+            </div>
+
+            <div id="t-ag" class="tab-content" style="display:none;">
+                <div class="card">
+                    <h3>Ajouter Agence</h3>
+                    <input id="ag-name" placeholder="Nom Agence">
+                    <input id="ag-mail" placeholder="Email Gérant">
+                    <input id="ag-pin" placeholder="PIN">
+                    <button class="btn btn-blue" onclick="addAg()">Créer Agence</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-pdv" style="display:none;">
+            <div class="card" style="max-width:500px; margin:auto">
+                <h3>Vente / Caisse</h3>
+                <input id="c-nom" placeholder="Nom Client">
+                <input id="c-tel" placeholder="Téléphone">
+                <select id="v-prod"></select>
+                <input id="v-qty" type="number" value="1">
+                <button class="btn btn-blue" onclick="addCart()">+ Ajouter au panier</button>
+                <div id="cart-list" style="margin:15px 0"></div>
+                <h2 style="text-align:right">Total: <span id="cart-total">0</span> GNF</h2>
+                <button class="btn" style="background:var(--green); color:white" onclick="sell()">Imprimer Reçu</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const firebaseConfig = { 
+    apiKey: "AIzaSyDxtMeYoigD5pLHJFaE3hFYZsWxgINmnXA", 
+    databaseURL: "https://planning-with-ai-e9826-default-rtdb.firebaseio.com/", 
+    projectId: "planning-with-ai-e9826" 
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+let _S = {}; let _DATA = {}; let _CART = [];
+
+db.ref('/').on('value', s => { _DATA = s.val() || {}; if(_S.role) update(); });
+
+function handleAuth() {
+    const e = document.getElementById('auth-email').value.toLowerCase().trim();
+    const p = document.getElementById('auth-pin').value;
+    if(e === "mamadouneguetkeita@gmail.com" && p === "admin123") return login("ADMIN", "COMP_1"); // Exemple démo
+    Object.entries(_DATA.companies || {}).forEach(([cid, c]) => {
+        if(c.admin_email === e && c.admin_pin === p) login("ADMIN", cid);
+        Object.entries(c.pdvs || {}).forEach(([pid, ag]) => { if(ag.email === e && ag.pin === p) login("PDV", cid, pid); });
+    });
+}
+
+function login(r, cid, pid) {
+    _S = { role:r, cid, pid };
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    document.getElementById('view-admin').style.display = r === "ADMIN" ? "block" : "none";
+    document.getElementById('view-pdv').style.display = r === "PDV" ? "block" : "none";
+}
+
+function switchTab(id) {
+    document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+    document.getElementById(id).style.display = 'block';
+}
+
+function update() {
+    const c = _DATA.companies?.[_S.cid];
+    if(!c) return;
+    document.getElementById('comp-title').innerText = "| " + c.name;
+
+    if(_S.role === "ADMIN") {
+        const ps = Object.entries(c.products || {});
+        document.getElementById('stk-table').querySelector('tbody').innerHTML = ps.map(([id,p])=>`<tr><td>${p.name}</td><td>${p.qty}</td></tr>`).join('');
+        const opt = ps.map(([id,p])=>`<option value="${id}">${p.name} (${p.qty})</option>`).join('');
+        document.getElementById('trans-p').innerHTML = opt;
+        document.getElementById('trans-d').innerHTML = Object.entries(c.pdvs || {}).map(([id,a])=>`<option value="${id}">${a.name}</option>`).join('');
+    }
+
+    if(_S.role === "PDV") {
+        const ag = c.pdvs[_S.pid];
+        document.getElementById('v-prod').innerHTML = Object.entries(c.products || {}).map(([id,p])=>`<option value="${id}">${p.name} (Stock: ${ag.stock?.[id]||0})</option>`).join('');
+    }
+}
+
+function doTransfer() {
+    const pid = document.getElementById('trans-p').value;
+    const aid = document.getElementById('trans-d').value;
+    const qty = parseInt(document.getElementById('trans-q').value);
+    const c = _DATA.companies[_S.cid];
+    if(qty > c.products[pid].qty) return alert("Stock insuffisant");
+    db.ref(`companies/${_S.cid}/products/${pid}/qty`).set(c.products[pid].qty - qty);
+    const curAg = c.pdvs[aid].stock?.[pid] || 0;
+    db.ref(`companies/${_S.cid}/pdvs/${aid}/stock/${pid}`).set(curAg + qty);
+    alert("Transfert effectué !");
+}
+
+function addCart() {
+    const pid = document.getElementById('v-prod').value;
+    const qty = parseInt(document.getElementById('v-qty').value);
+    const p = _DATA.companies[_S.cid].products[pid];
+    _CART.push({ pid, name:p.name, qty, price:p.price, total:p.price*qty });
+    renderCart();
+}
+
+function renderCart() {
+    let t = 0; document.getElementById('cart-list').innerHTML = _CART.map(i=>{ t+=i.total; return `<div>${i.name} x${i.qty} = ${i.total}</div>` }).join('');
+    document.getElementById('cart-total').innerText = t;
+}
+
+function sell() {
+    const nom = document.getElementById('c-nom').value;
+    const tel = document.getElementById('c-tel').value;
+    const c = _DATA.companies[_S.cid];
+    _CART.forEach(i => {
+        const cur = c.pdvs[_S.pid].stock[i.pid];
+        db.ref(`companies/${_S.cid}/pdvs/${_S.pid}/stock/${i.pid}`).set(cur - i.qty);
+    });
+    document.getElementById('p-comp').innerText = c.name;
+    document.getElementById('p-date').innerText = new Date().toLocaleString();
+    document.getElementById('p-client').innerText = nom;
+    document.getElementById('p-tel').innerText = tel;
+    document.getElementById('p-items').innerHTML = _CART.map(i=>`<div>${i.name} x${i.qty} : ${i.total} GNF</div>`).join('');
+    document.getElementById('p-total').innerText = document.getElementById('cart-total').innerText + " GNF";
+    window.print();
+    _CART = []; renderCart();
+}
+
+function addProd() { db.ref(`companies/${_S.cid}/products/P_${Date.now()}`).set({ name:document.getElementById('prod-name').value, price:document.getElementById('prod-price').value, qty:parseInt(document.getElementById('prod-qty').value) }); }
+function addAg() { db.ref(`companies/${_S.cid}/pdvs/AG_${Date.now()}`).set({ name:document.getElementById('ag-name').value, email:document.getElementById('ag-mail').value, pin:document.getElementById('ag-pin').value }); }
+</script>
+</body>
+</html>
